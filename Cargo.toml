@@ -1,0 +1,12 @@
+[package]
+name = "horizon-pingfix"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Keeps the server list's pings fresh: the list refreshes itself every so often, so a server that came back — or a network that changed — answers within seconds. A Horizon native mod ported from the PingFix mod."
+publish = false
+
+# The runtime doubles as the mod's library (its tests) and the module the
+# bundle injects into the game; the helper files compile only inside it.
+[lib]
+path = "mixins/pingfix/runtime.rs"

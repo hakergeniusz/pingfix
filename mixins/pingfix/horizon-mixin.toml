@@ -1,0 +1,31 @@
+[mod]
+id = "pingfix"
+version = "0.1.0"
+priority = 100
+
+# The commit it was tested on: it patches the title screen's sources
+# directly, so a Horizon change there needs a re-check.
+[compatibility]
+horizon_revision = "2ebf00a0281c592f79191e76fce0e7d522c6f425"
+
+# The mod's brain: pure standard library, no game types, tested on its own.
+[[module]]
+id = "runtime"
+file = "crates/horizon-client/src/title.rs"
+name = "pingfix"
+source = "runtime.rs"
+
+# Once a frame on the title screen: while the multiplayer server list is the
+# open screen, the counter says when it is time to refresh it — the game's
+# own F5, which rebuilds the list and re-pings every server from scratch.
+# A server that was down, or a network that changed under the game, answers
+# again within seconds instead of keeping its stale failure for as long as
+# the screen stands.
+[[injection]]
+id = "frame"
+kind = "HEAD"
+target = "horizon_client::title::Title::update_toast"
+helper = "refresh.rs"
+bindings = [
+  { name = "title", ty = "&mut crate::title::Title", value = "&mut *self" },
+]
