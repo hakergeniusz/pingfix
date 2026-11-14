@@ -1,6 +1,6 @@
 [mod]
 id = "pingfix"
-version = "0.1.0"
+version = "0.1.1"
 priority = 100
 
 # The commit it was tested on: it patches the title screen's sources
@@ -28,4 +28,14 @@ target = "horizon_client::title::Title::update_toast"
 helper = "refresh.rs"
 bindings = [
   { name = "title", ty = "&mut crate::title::Title", value = "&mut *self" },
+]
+
+# The row in Options > Mods: the mod and what it does.
+[[injection]]
+id = "list"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_mods"
+helper = "list.rs"
+bindings = [
+  { name = "mods", ty = "&mut Vec<crate::game::native_hooks::NativeMod>", value = "&mut *mods" },
 ]
