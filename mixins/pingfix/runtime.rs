@@ -5,39 +5,41 @@
 // then — down, unreachable, or timed out because the network changed under
 // the game (Wi-Fi switched, IP renewed, VPN closed) — stands for as long as
 // the screen stands: vanilla never asks again, and neither does Horizon.
-// The original mod's answer was to open the screen anew every 1200 rendered
-// frames while it is open; Horizon's own F5 does exactly that (it rebuilds
-// the list, which re-pings every server from scratch), and this counter
-// says when to press it.
+// 0.1.1 answered with a refresh every 1200 frames; the user's spec is
+// sharper: the pane's answers should be there the moment it opens, so the
+// very first frame of an open list fires the game's own F5 (`refresh_servers`
+// rebuilds the list, which re-pings every server from scratch), and the
+// interval then keeps the answers fresh at half the old wait.
 use core::cell::Cell;
 
 /// Rendered frames between automatic refreshes while the server list is
-/// open (the original's `REFRESH_INTERVAL_FRAMES`): about 20 seconds at
-/// 60 fps, so a list that just refreshed never spins.
-pub const REFRESH_FRAMES: u32 = 1200;
+/// open: about 10 seconds at 60 fps, so a list that just refreshed never
+/// spins and the scroll position is not yanked around too often.
+pub const REFRESH_FRAMES: u32 = 600;
 
 thread_local! {
-    /// How many rendered frames the server list has been standing open
-    /// since the last refresh — or since it was left, which forgets the
-    /// count (a list reopened soon after should still get a fair run).
-    static FRAMES: Cell<u32> = const { Cell::new(0) };
+    /// How many rendered frames the server list has been standing open —
+    /// 0 means it is not open (a frame with the list closed resets this,
+    /// so the next opening counts as the first frame again).
+    static OPEN: Cell<u32> = const { Cell::new(0) };
 }
 
 /// One rendered frame on the title screen. `list_open`: the multiplayer
 /// server list is the open screen. Returns whether the list should refresh
-/// now — the count restarts either way, and a frame with the list closed
-/// forgets the count outright.
+/// now: the frame that opens it (an instant ping, per the mod's spec), and
+/// then every interval frame while it stands.
 pub fn frame(list_open: bool) -> bool {
-    FRAMES.with(|frames| {
-        if !list_open {
-            frames.set(0);
-            return false;
-        }
-        let next = frames.get().saturating_add(1);
-        let refresh = next >= REFRESH_FRAMES;
-        frames.set(if refresh { 0 } else { next });
-        refresh
-    })
+    if !list_open {
+        OPEN.set(0);
+        return false;
+    }
+    let open = OPEN.get().saturating_add(1);
+    OPEN.set(open);
+    let refresh = open == 1 || open > REFRESH_FRAMES;
+    if refresh {
+        OPEN.set(0);
+    }
+    refresh
 }
 
 #[cfg(test)]
@@ -45,29 +47,26 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_list_refreshes_every_1200_open_frames() {
-        for _ in 0..REFRESH_FRAMES - 1 {
-            assert!(!frame(true), "an open list counts up before the interval");
-        }
-        assert!(frame(true), "the interval's last frame refreshes the list");
-        for _ in 0..REFRESH_FRAMES - 1 {
-            assert!(!frame(true), "the count restarts after a refresh");
+    fn opening_the_list_pings_instantly() {
+        assert!(frame(true), "the first open frame refreshes right away");
+    }
+
+    #[test]
+    fn the_interval_holds_after_the_instant_ping() {
+        assert!(frame(true), "instant ping on open");
+        for _ in 0..REFRESH_FRAMES {
+            assert!(!frame(true), "the interval holds before the next ping");
         }
         assert!(frame(true), "and the next interval refreshes again");
     }
 
     #[test]
-    fn leaving_the_list_forgets_the_count() {
+    fn reopening_the_list_pings_instantly_again() {
         for _ in 0..500 {
             frame(true);
         }
         assert!(!frame(false), "a closed list never refreshes");
-        // A list reopened right away counts from the start, so it gets a
-        // full interval before its first automatic refresh.
-        for _ in 0..REFRESH_FRAMES - 1 {
-            assert!(!frame(true), "the count started over");
-        }
-        assert!(frame(true));
+        assert!(frame(true), "a reopened list pings instantly, not 20 s in");
     }
 
     #[test]
@@ -78,5 +77,6 @@ mod tests {
                 "the title screen's other pages never refresh"
             );
         }
+        assert_eq!(OPEN.get(), 0, "a closed list forgets its open count");
     }
 }
